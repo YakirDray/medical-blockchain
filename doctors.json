@@ -4,8 +4,9 @@
     "specialization": "psi",
     "license_number": "8155686",
     "email": "y@g.com",
+    "password":"123456",
     "private_key": "b2fa21aad8fd62ed7fa8bb0f6bd0fc2f96e679a80034c542b10cd8515744837a",
     "registration_date": "2024-10-22T23:41:48.457132",
-    "is_approved": false
+    "is_approved": true
   }
 }

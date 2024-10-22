@@ -30,13 +30,18 @@ class MedicalOperations:
         balance = self.w3.eth.get_balance(self.admin_account.address)
         print(f"יתרת המנהל: {self.w3.from_wei(balance, 'ether')} ETH")
     
+    def is_admin(self, account_address):
+        """בודק אם הכתובת היא של המנהל"""
+        return account_address == self.admin_account.address
+
     def send_transaction(self, transaction, private_key, description=""):
         """שליחת טרנזקציה עם ניסיונות חוזרים"""
         try:
             print(f"\nשולח טרנזקציה{': ' + description if description else ''}")
             
-            # הגדלת מחיר הגז ב-20%
-            transaction['gasPrice'] = int(self.w3.eth.gas_price * 1.2)
+            # הגדרת מחיר הגז אוטומטי
+            transaction['gas'] = self.w3.eth.estimate_gas(transaction)
+            transaction['gasPrice'] = self.w3.eth.gas_price
             
             # חתימה ושליחה
             signed_tx = self.w3.eth.account.sign_transaction(transaction, private_key)
@@ -72,13 +77,15 @@ class MedicalOperations:
     def approve_doctor(self, doctor_address):
         """אישור רופא במערכת"""
         try:
+            # בדיקת בעלות
+            if not self.is_admin(self.admin_account.address):
+                raise PermissionError("רק מנהל יכול לאשר רופאים")
+            
             print(f"\nמאשר רופא בכתובת: {doctor_address}")
             
             # בדיקת פרטי הרופא לפני האישור
             doctor = self.contract.functions.getDoctorDetails(doctor_address).call()
-            print(f"פרטי הרופא:")
-            print(f"שם: {doctor[0]}")
-            print(f"התמחות: {doctor[1]}")
+            print(f"פרטי הרופא: שם: {doctor[0]}, התמחות: {doctor[1]}")
             
             if doctor[4]:  # doctor.isApproved
                 print("הרופא כבר מאושר במערכת")
@@ -87,14 +94,15 @@ class MedicalOperations:
             # בניית הטרנזקציה
             tx = self.contract.functions.approveDoctor(doctor_address).build_transaction({
                 'from': self.admin_account.address,
-                'nonce': self.w3.eth.get_transaction_count(self.admin_account.address),
-                'gas': 200000
+                'nonce': self.w3.eth.get_transaction_count(self.admin_account.address)
             })
             
             # שליחת הטרנזקציה
             receipt = self.send_transaction(tx, self.admin_account.key, "אישור רופא")
             return True
             
+        except PermissionError as pe:
+            print(f"❌ שגיאת הרשאה: {str(pe)}")
         except Exception as e:
             print(f"\n❌ שגיאה באישור הרופא: {str(e)}")
             return False
@@ -103,15 +111,27 @@ class MedicalOperations:
         """בדיקת סטטוס רופא"""
         try:
             details = self.contract.functions.getDoctorDetails(doctor_address).call()
-            print("\nסטטוס רופא:")
-            print(f"שם: {details[0]}")
-            print(f"התמחות: {details[1]}")
-            print(f"רשום: {'כן' if details[3] else 'לא'}")
-            print(f"מאושר: {'כן' if details[4] else 'לא'}")
+            print("\nסטטוס רופא: שם: {details[0]}, התמחות: {details[1]}")
             return details[4]  # מחזיר האם מאושר
         except Exception as e:
             print(f"❌ שגיאה בבדיקת סטטוס: {str(e)}")
             return False
+
+    def log_transaction(self, tx_receipt, action):
+        """רישום כל טרנזקציה ללוג למעקב"""
+        try:
+            log_entry = {
+                'action': action,
+                'transaction_hash': tx_receipt['transactionHash'].hex(),
+                'status': 'approved' if tx_receipt['status'] == 1 else 'failed',
+                'timestamp': datetime.now().isoformat()
+            }
+            with open('transaction_log.json', 'a') as log_file:
+                json.dump(log_entry, log_file, indent=2)
+                log_file.write('\n')
+            print("🔍 הטרנזקציה נרשמה בלוג.")
+        except Exception as e:
+            print(f"❌ שגיאה ברישום לוג: {str(e)}")
 
 def main():
     # אתחול המערכת וביצוע פעולות

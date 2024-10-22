@@ -37,6 +37,21 @@ class MedicalRecordSystem:
             print(f"שגיאה בטעינת נתוני מטופלים: {str(e)}")
             return {}
     
+    def _log_action(self, action, details):
+        """שמירת פעולה ללוג לצורך מעקב"""
+        try:
+            log_entry = {
+                'action': action,
+                'details': details,
+                'timestamp': datetime.now().isoformat()
+            }
+            with open('system_log.json', 'a') as log_file:
+                json.dump(log_entry, log_file, indent=2)
+                log_file.write('\n')
+            print("🔍 פעולה נרשמה בלוג.")
+        except Exception as e:
+            print(f"❌ שגיאה ברישום לוג: {str(e)}")
+    
     def add_medical_record(self, doctor_private_key, patient_address, record_data):
         """הוספת רשומה רפואית"""
         try:
@@ -67,6 +82,7 @@ class MedicalRecordSystem:
                 json.dump(records, f, indent=2)
             
             print(f"✅ רשומה רפואית נוספה למטופל {patient['name']}")
+            self._log_action("הוספת רשומה רפואית", f"מטופל: {patient['name']}, דוקטור: {Account.from_key(doctor_private_key).address}")
             return True
             
         except Exception as e:
@@ -78,6 +94,11 @@ class MedicalRecordSystem:
         try:
             if patient_address not in self.patients:
                 raise ValueError("מטופל לא קיים במערכת")
+            
+            # וידוא שהרופא מאושר לגשת למידע
+            doctor_address = Account.from_key(doctor_private_key).address
+            if not self.contract.functions.isDoctorApproved(doctor_address).call():
+                raise PermissionError("לרופא אין אישור גישה למידע של המטופל הזה")
             
             patient = self.patients[patient_address]
             filename = f'medical_records_{patient["medical_id"]}.json'
@@ -98,8 +119,11 @@ class MedicalRecordSystem:
                 for key, value in record['data'].items():
                     print(f"  {key}: {value}")
             
+            self._log_action("גישה לרשומות רפואיות", f"רופא: {doctor_address}, מטופל: {patient['name']}")
             return records
             
+        except PermissionError as pe:
+            print(f"❌ שגיאת הרשאה: {str(pe)}")
         except Exception as e:
             print(f"❌ שגיאה בקבלת רשומות רפואיות: {str(e)}")
             return []

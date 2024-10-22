@@ -64,7 +64,7 @@ class PatientManagement:
             doctor_balance = self.w3.eth.get_balance(doctor_account.address)
             print(f"יתרת הרופא: {self.w3.from_wei(doctor_balance, 'ether')} ETH")
             
-            # רישום המטופל בחוזה
+            # רישום המטופל בחוזה עם אופטימיזציית גז
             tx = self.contract.functions.registerPatient(
                 patient_account.address,
                 name,
@@ -73,7 +73,11 @@ class PatientManagement:
             ).build_transaction({
                 'from': doctor_account.address,
                 'nonce': self.w3.eth.get_transaction_count(doctor_account.address),
-                'gas': 300000,
+                'gas': self.w3.eth.estimate_gas({
+                    'from': doctor_account.address,
+                    'to': self.contract.address,
+                    'data': self.contract.encodeABI(fn_name='registerPatient', args=[patient_account.address, name, age, medical_id])
+                }),
                 'gasPrice': int(self.w3.eth.gas_price * 1.2)  # 20% יותר גז
             })
             
