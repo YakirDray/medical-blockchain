@@ -607,6 +607,40 @@ class MedicalGUI:
         # עדכון הרשימה
         self.update_records_list()
 
+
+    def view_medical_record(self):
+     selection = self.records_tree.selection()
+     if not selection:
+        messagebox.showwarning("אזהרה", "נא לבחור רשומה")
+        return
+
+     record_id = self.records_tree.item(selection[0])["values"][0]
+
+     try:
+        record = self.record_system.get_medical_record(record_id)
+        
+        if not record:
+            messagebox.showerror("שגיאה", "רשומה לא נמצאה")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"פרטי רשומה - {record['type']}")
+        dialog.geometry("600x400")
+
+        # Display medical record details here
+        ttk.Label(dialog, text="תיאור הרשומה:").pack(pady=10)
+        description_text = tk.Text(dialog, wrap="word", height=10)
+        description_text.pack(fill="both", expand=True, padx=10, pady=10)
+        description_text.insert("1.0", record.get("description", ""))
+        description_text.configure(state="disabled")
+
+        ttk.Button(dialog, text="סגור", command=dialog.destroy).pack(pady=10)
+
+     except Exception as e:
+        messagebox.showerror("שגיאה", f"שגיאה בטעינת הרשומה: {str(e)}")
+
+
+
     def create_stat_widget(self, parent, title, value, row, col):
         """יצירת ווידג'ט סטטיסטי"""
         frame = ttk.Frame(parent)
@@ -765,6 +799,9 @@ class MedicalGUI:
             style="Secondary.TButton"
         ).pack(side="right", padx=5)
 
+    
+    
+    
     def view_patient(self):
         """צפייה בפרטי מטופל"""
         selection = self.patients_tree.selection()
@@ -889,45 +926,45 @@ class MedicalGUI:
 
 
     def approve_selected_doctors(self):
-     selection = self.doctors_tree.selection()
-     print(f"Selection: {selection}")  # הדפסה לבדיקה
-    
+     selection = self.doctors_tree.selection()  # Get selected doctors
      if not selection:
-        messagebox.showwarning("אזהרה", "נא לבחור רופא לאישור")
+        messagebox.showwarning("אזהרה", "נא לבחור רופא לאישור")  # No selection warning
         return
-    
+
      try:
         approved_count = 0
         for item in selection:
-            # קבלת נתוני הרופא הנבחר
+            # Get the doctor's details from the selected row
             doctor_values = self.doctors_tree.item(item)['values']
-            print(f"Doctor values: {doctor_values}")  # הדפסה לבדיקה
             
             if not doctor_values:
                 continue
-                
-            license_number = doctor_values[1]  # מספר רישיון בעמודה השנייה
-            current_status = doctor_values[4]  # סטטוס בעמודה החמישית
-            
-            # בדיקה אם הרופא כבר מאושר
+
+            license_number = doctor_values[1]  # Extract license number (second column)
+            current_status = doctor_values[4]  # Extract current status (fifth column)
+
+            # Check if the doctor is already approved
             if current_status == "מאושר":
                 continue
-            
-            # אישור הרופא
+
+            # Approve the doctor by license number
             if self.medical_system.approve_doctor(license_number):
                 approved_count += 1
-                print(f"Doctor {license_number} approved")  # הדפסה לבדיקה
-        
+                print(f"Doctor with license {license_number} approved.")  # Log approved doctor
+
+        # Notify the user of the result
         if approved_count > 0:
             messagebox.showinfo("הצלחה", f"{approved_count} רופאים אושרו בהצלחה")
-            self.update_doctors_list()
+            self.update_doctors_list()  # Refresh the list of doctors
         else:
             messagebox.showinfo("מידע", "לא נמצאו רופאים חדשים לאישור")
     
      except Exception as e:
-        print(f"Error: {str(e)}")  # הדפסה לבדיקה
+        print(f"Error approving doctors: {str(e)}")  # Log the error
         messagebox.showerror("שגיאה", f"שגיאה באישור הרופאים: {str(e)}")
 
+    
+    
     def add_medical_record(self, patient_id, parent_window=None):
         """הוספת רשומה רפואית"""
         dialog = tk.Toplevel(parent_window or self.root)
@@ -1045,7 +1082,6 @@ class MedicalGUI:
             command=dialog.destroy,
             style="Secondary.TButton"
         ).pack(side="right", padx=5)
-
     def update_doctors_list(self):
      # ניקוי הטבלה
      for item in self.doctors_tree.get_children():
@@ -1075,6 +1111,7 @@ class MedicalGUI:
         print(f"Error updating list: {str(e)}")  # הדפסה לבדיקה
         messagebox.showerror("שגיאה", f"שגיאה בטעינת רשימת הרופאים: {str(e)}")
     
+
     
     def update_patients_list(self):
         """עדכון רשימת המטופלים"""
@@ -1114,27 +1151,7 @@ class MedicalGUI:
         print(f"נבחר רופא: {self.doctors_tree.item(selection[0])['values']}")
 
 
-    def approve_doctor(self, license_number):
-     try:
-        found = False
-        for doctor in self.doctors.values():
-            if str(doctor.get("license", "")) == str(license_number):
-                doctor["is_approved"] = True
-                doctor["approval_date"] = datetime.now().isoformat()
-                found = True
-                break
-        
-        if found:
-            self.save_doctors()
-            return True
-            
-        return False
-        
-     except Exception as e:
-        print(f"Error in approve_doctor: {str(e)}")  # הדפסה לבדיקה
-        return False
-    
-    
+   
     def update_records_list(self):
         """עדכון רשימת הרשומות הרפואיות"""
         for item in self.records_tree.get_children():

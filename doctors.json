@@ -4,10 +4,11 @@
         "specialization": "psi",
         "license_number": "8155686",
         "email": "y@g.com",
-        "password": "123456",
-        "private_key": "b2fa21aad8fd62ed7fa8bb0f6bd0fc2f96e679a80034c542b10cd8515744837a",
+        "private_key": "gAAAAABnGUW7PjhOfhsZdpfJ_FQNgMq0PkiXq8OR9rl1wC04CoufoDltWSSsTZOFN5AdlsgYgIMxGiz7OHr6fOuYNsRRSfORkg",
         "registration_date": "2024-10-22T23:41:48.457132",
-        "is_approved": true
+        "is_approved": true,
+        "last_login": null,
+        "active": true
     },
     "6ba69ac9-7a7e-4c93-b9b1-bec897540676": {
         "name": "adi",
@@ -15,7 +16,7 @@
         "license_number": "569852",
         "email": "a@medical.com",
         "private_key": "gAAAAABnGUW7PjhOfhsZdpfJ_FQNgMq0PkiXq8OR9rl1wC04CoufoDltWSSsTZOFN5AdlsgYgIMxGiz7OHr6fOuYNsRRSfORkg==",
-        "is_approved": false,
+        "is_approved": true,
         "registration_date": "2024-10-23T21:51:39.336630",
         "last_login": null,
         "active": true
@@ -28,6 +29,17 @@
         "private_key": "gAAAAABnGUoUwHtvtpRyDnOny2dIcVS0ZA-XTdWeMnV2Z4S9yN4vAveRagLFlZBQlwJt8ahEAZOZIifJn1bo3zDd-WcecIq87Q==",
         "is_approved": false,
         "registration_date": "2024-10-23T22:10:12.449723",
+        "last_login": null,
+        "active": true
+    },
+    "d04ef5c6-c2af-4b6a-a2f3-f480f1e09d23": {
+        "name": "יקיר דריי",
+        "specialization": "קרדיאולוגיה",
+        "license_number": "316586",
+        "email": "yd@medic.com",
+        "private_key": "gAAAAABnGVTqrlbbVoESoDoaX-Qw6dKsdHqjKfo-ZlS7VzRGFgqVPxJf3F7FR5l3_F9bIoE2vnI36uPwO3VER9YYyKgfVfx7Iw==",
+        "is_approved": false,
+        "registration_date": "2024-10-23T22:56:26.143431",
         "last_login": null,
         "active": true
     }
