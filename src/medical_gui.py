@@ -22,7 +22,8 @@ class MedicalGUI:
         self.medical_system = MedicalSystem()
         self.record_system = MedicalRecordSystem()
         self.analytics = MedicalAnalytics()
-        self.cipher_suite = Fernet(base64.urlsafe_b64encode(os.urandom(32)))
+
+        # אתחול הצפנה עם מפתח קבוע
         self.init_encryption()
 
         # אתחול חיבור לבלוקצ'יין
@@ -100,6 +101,7 @@ class MedicalGUI:
         tk.Button(login_frame, text="הירשם כרופא חדש", command=self.create_registration_screen).pack(pady=10)
 
     def send_transaction(self, to_address, value_in_ether):
+        """שליחת טרנזקציה לבלוקצ'יין"""
         try:
             # כתובת השולח - חשבון מנהל
             sender_address = self.w3.eth.accounts[0]  # חשבון 0 מ-Ganache
@@ -162,8 +164,8 @@ class MedicalGUI:
         if data["password"] != data["password_confirm"]:
             messagebox.showerror("שגיאה", "הסיסמאות אינן תואמות")
             return
+
         encrypted_password = self.encrypt_password(data["password"])
-        print(f"Password: {data['password']}, Encrypted: {encrypted_password}")
         
         # שמירת נתוני הרופא
         doctor_data = {
@@ -171,7 +173,7 @@ class MedicalGUI:
             "license_number": data["license"],
             "specialization": data["specialization"],
             "email": data["email"],
-            "private_key": self.encrypt_password(data["password"]),
+            "private_key": encrypted_password,
             "is_approved": False  # דרוש אישור מנהל
         }
 
@@ -212,6 +214,7 @@ class MedicalGUI:
         return False
 
     def authenticate_doctor(self, email, password):
+        """אימות רופא באמצעות אימייל וסיסמה"""
         try:
             if os.path.exists('doctors.json'):
                 with open('doctors.json', 'r') as f:
@@ -221,7 +224,6 @@ class MedicalGUI:
                     if doctor['email'] == email:
                         # פענוח הסיסמה המוצפנת והשוואה עם הסיסמה המוזנת
                         stored_password = self.decrypt_password(doctor['private_key'])
-                        print(f"Entered: {password}, Decrypted Stored: {stored_password}")
                         if password == stored_password:
                             if doctor['is_approved']:
                                 messagebox.showinfo("התחברות מוצלחת", f"ברוך הבא, ד\"ר {doctor['name']}")
@@ -307,6 +309,7 @@ class MedicalGUI:
             messagebox.showerror("שגיאה", f"שגיאה בטעינת רשימת הרופאים: {str(e)}")
 
     def approve_doctor(self):
+        """אישור רופא על ידי המנהל והעברת טרנזקציה לבלוקצ'יין"""
         selected_item = self.doctors_tree.curselection()
         if not selected_item:
             messagebox.showerror("שגיאה", "יש לבחור רופא לאישור")
@@ -328,7 +331,7 @@ class MedicalGUI:
 
                 # ביצוע טרנזקציה להוספת הרופא בבלוקצ'יין
                 doctor_address = doctors[license_number]["email"]  # נניח שהכתובת היא האימייל
-                self.send_transaction(doctor_address, 0.000000001)  # טרנזקציה של 0.01 ETH
+                self.send_transaction(doctor_address, 0.000000001)  # טרנזקציה של 0.000000001 ETH
 
                 messagebox.showinfo("הצלחה", "הרופא אושר בהצלחה!")
                 self.update_doctors_list()
@@ -338,6 +341,7 @@ class MedicalGUI:
             messagebox.showerror("שגיאה", f"שגיאה באישור הרופא: {str(e)}")
 
     def create_patient_transaction(self, patient_address, value_in_ether):
+        """שליחת טרנזקציה למטופל"""
         try:
             # כתובת הרופא
             doctor_address = self.w3.eth.accounts[0]  # חשבון הרופא
@@ -347,7 +351,7 @@ class MedicalGUI:
                 'to': patient_address,
                 'from': doctor_address,
                 'value': self.w3.toWei(value_in_ether, 'ether'),
-                'gas': 21000,
+                'gas': 6721975,
                 'gasPrice': self.w3.toWei('50', 'gwei')
             }
 
@@ -358,6 +362,7 @@ class MedicalGUI:
             messagebox.showerror("שגיאה", f"שגיאה בשליחת הטרנזקציה: {str(e)}")
     
     def create_doctor_dashboard(self, doctor_name):
+        """מסך רופא לשליחת טרנזקציות למטופלים"""
         doctor_frame = tk.Frame(self.root)
         doctor_frame.pack(fill="both", expand=True)
 
@@ -374,6 +379,7 @@ class MedicalGUI:
         tk.Button(doctor_frame, text="שלח טרנזקציה", command=self.send_patient_transaction).pack(pady=10)
 
     def send_patient_transaction(self):
+        """שליחת טרנזקציה לרופא"""
         patient_address = self.patient_address_entry.get()
         amount = float(self.amount_entry.get())
         self.create_patient_transaction(patient_address, amount)

@@ -9,7 +9,7 @@ NETWORK_CONFIG = {
     },
     'local': {
         'chain_id': 1337,
-        'rpc_url': 'http://127.0.0.1:8545',
+        'rpc_url': 'http://127.0.0.1:7545',
         'network_name': 'Local Network',
         'currency_symbol': 'ETH',
         'network_type': 'local'

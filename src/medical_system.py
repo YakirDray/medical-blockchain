@@ -63,7 +63,7 @@ class MedicalSystem:
             eth_transfer_tx = {
                 'nonce': self.w3.eth.get_transaction_count(self.admin_account.address),
                 'gasPrice': self.w3.eth.gas_price,
-                'gas': 21000,
+                'gas': 6721975,
                 'to': doctor_account.address,
                 'value': self.w3.to_wei(0.0005, 'ether'),
                 'data': b'',
@@ -79,7 +79,7 @@ class MedicalSystem:
             ).build_transaction({
                 'from': self.admin_account.address,
                 'nonce': self.w3.eth.get_transaction_count(self.admin_account.address),
-                'gas': 25000,
+                'gas': 6721975,
                 'gasPrice': self.w3.eth.gas_price,
                 'chainId': self.w3.eth.chain_id
             })
@@ -120,7 +120,7 @@ class MedicalSystem:
             ).build_transaction({
                 'from': self.admin_account.address,
                 'nonce': self.w3.eth.get_transaction_count(self.admin_account.address),
-                'gas': 25000,
+                'gas': 6721975,
                 'gasPrice': self.w3.eth.gas_price,
                 'chainId': self.w3.eth.chain_id
             })
@@ -157,7 +157,7 @@ class MedicalSystem:
             ).build_transaction({
                 'from': self.admin_account.address,
                 'nonce': self.w3.eth.get_transaction_count(self.admin_account.address),
-                'gas': 25000,
+                'gas': 6721975,
                 'gasPrice': self.w3.eth.gas_price,
                 'chainId': self.w3.eth.chain_id
             })
