@@ -9,7 +9,7 @@ contract MedicalRegistry {
         bool isRegistered;
         bool isApproved;
         mapping(address => bool) patients;
-        address[] patientList;  // רשימת כתובות המטופלים
+        address[] patientList;
         uint256 patientCount;
         string email;
         uint256 registrationDate;
@@ -20,7 +20,7 @@ contract MedicalRegistry {
         uint256 age;
         bool exists;
         string medicalId;
-        address doctorAddress;  // כתובת הרופא המטפל
+        address doctorAddress;
         uint256 registrationDate;
     }
     

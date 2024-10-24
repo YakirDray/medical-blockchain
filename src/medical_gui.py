@@ -1,396 +1,480 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 import json
 import os
-from cryptography.fernet import Fernet
-import base64
 from web3 import Web3
-from medical_system import MedicalSystem
-from medical_records import MedicalRecordSystem
-from medical_analytics import MedicalAnalytics
+from datetime import datetime
 
-class MedicalGUI:
+class MedicalInterface:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("מערכת רפואית מבוזרת עם בלוקצ'יין")
+        self.root.title("Decentralized Medical System")
         self.root.geometry("1024x768")
 
-        # אתחול הצפנה
-        self.cipher_suite = Fernet(base64.urlsafe_b64encode(os.urandom(32)))
+        # Blockchain connection
+        self.w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:7545"))
+        if not self.w3.is_connected():
+            messagebox.showerror("Error", "Cannot connect to blockchain")
+            raise Exception("No blockchain connection")
 
-        # אתחול מערכות רפואיות
-        self.medical_system = MedicalSystem()
-        self.record_system = MedicalRecordSystem()
-        self.analytics = MedicalAnalytics()
-
-        # אתחול הצפנה עם מפתח קבוע
-        self.init_encryption()
-
-        # אתחול חיבור לבלוקצ'יין
-        self.init_web3()
-
-        # התחלת הממשק
+        # Contract loading
+        self.load_contract()
+        
+        # Admin account
+        self.admin_account = self.w3.eth.accounts[0]
+        
+        # Setup styles
+        self.setup_styles()
+        
+        # Create login screen
         self.create_login_screen()
 
-    def init_web3(self):
-        """אתחול חיבור לבלוקצ'יין"""
-        self.w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:7545"))  # שימוש ב-Ganache
-        if not self.w3.is_connected():
-            messagebox.showerror("שגיאה", "החיבור לבלוקצ'יין נכשל")
-        else:
-            messagebox.showinfo("הצלחה", "חיבור לבלוקצ'יין בוצע בהצלחה")
+    def setup_styles(self):
+        """Setup GUI styles"""
+        style = ttk.Style()
+        style.configure('Title.TLabel', font=('Helvetica', 16, 'bold'))
+        style.configure('Header.TLabel', font=('Helvetica', 14, 'bold'))
+        style.configure('Info.TLabel', font=('Helvetica', 10))
 
-    def init_encryption(self):
-        """אתחול מפתח הצפנה ושימוש במפתח קבוע"""
-        key_file = 'encryption.key'
-        if os.path.exists(key_file):
-            with open(key_file, 'rb') as f:
-                key = f.read()
-        else:
-            key = base64.urlsafe_b64encode(os.urandom(32))
-            with open(key_file, 'wb') as f:
-                f.write(key)
+    def load_contract(self):
+        """Load smart contract"""
+        try:
+            # Read ABI and contract address
+            with open('contracts/contract_abi.json', 'r') as f:
+                contract_abi = json.load(f)
+            with open('contracts/contract_address.txt', 'r') as f:
+                contract_address = f.read().strip()
 
-        self.cipher_suite = Fernet(key)
+            # Create contract object
+            self.contract = self.w3.eth.contract(
+                address=contract_address,
+                abi=contract_abi
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"Error loading contract: {str(e)}")
+            raise
 
-    def encrypt_password(self, password):
-        """הצפנת הסיסמה"""
-        encrypted_password = self.cipher_suite.encrypt(password.encode('utf-8'))
-        return encrypted_password.decode('utf-8')
+    def create_login_screen(self):
+        """Create login screen"""
+        self.clear_screen()
+        
+        # Main frame
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(expand=True)
+        
+        # Title
+        ttk.Label(main_frame, 
+                 text="Decentralized Medical System", 
+                 style='Title.TLabel').pack(pady=20)
+        
+        # Wallet address field
+        ttk.Label(main_frame, text="Wallet Address:").pack(pady=5)
+        self.wallet_address_entry = ttk.Entry(main_frame, width=50)
+        self.wallet_address_entry.pack(pady=5)
+        
+        # User type selection
+        user_frame = ttk.Frame(main_frame)
+        user_frame.pack(pady=10)
+        
+        self.user_type = tk.StringVar(value="doctor")
+        ttk.Radiobutton(user_frame, 
+                       text="Doctor",
+                       variable=self.user_type,
+                       value="doctor").pack(side='left', padx=10)
+        ttk.Radiobutton(user_frame,
+                       text="Admin",
+                       variable=self.user_type,
+                       value="admin").pack(side='left', padx=10)
+        
+        # Action buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=20)
+        
+        ttk.Button(button_frame,
+                  text="Login",
+                  command=self.handle_login).pack(side='left', padx=5)
+        ttk.Button(button_frame,
+                  text="Doctor Registration",
+                  command=self.show_doctor_registration).pack(side='left', padx=5)
 
-    def decrypt_password(self, encrypted_password):
-        """פענוח הסיסמה"""
-        decrypted_password = self.cipher_suite.decrypt(encrypted_password.encode('utf-8'))
-        return decrypted_password.decode('utf-8')
+    def handle_login(self):
+        """Handle login process"""
+        try:
+            address = self.wallet_address_entry.get().strip()
+            if not Web3.is_address(address):
+                raise ValueError("Invalid wallet address")
+
+            if self.user_type.get() == "admin":
+                if address.lower() == self.admin_account.lower():
+                    self.show_admin_dashboard()
+                else:
+                    raise ValueError("Unauthorized address for admin")
+            else:
+                # Check doctor
+                doctor_details = self.contract.functions.getDoctorDetails(address).call()
+                if not doctor_details[3]:  # isRegistered
+                    raise ValueError("Doctor not registered in the system")
+                if not doctor_details[4]:  # isApproved
+                    raise ValueError("Doctor account not yet approved")
+                
+                # Save current account
+                self.current_doctor_address = address
+                self.show_doctor_dashboard(address, doctor_details)
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def show_doctor_dashboard(self, doctor_address, doctor_details):
+        """Show doctor dashboard"""
+        self.clear_screen()
+        
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(fill='both', expand=True)
+        
+        # Doctor info
+        ttk.Label(main_frame, 
+                 text=f"Welcome, Dr. {doctor_details[0]}", 
+                 style='Title.TLabel').pack(pady=10)
+             
+        info_frame = ttk.Frame(main_frame)
+        info_frame.pack(fill='x', pady=10)
+        
+        # Display doctor details
+        ttk.Label(info_frame,
+                 text=f"Specialization: {doctor_details[1]}",
+                 style='Info.TLabel').pack(side='left', padx=10)
+        ttk.Label(info_frame,
+                 text=f"License Number: {doctor_details[2]}",
+                 style='Info.TLabel').pack(side='left', padx=10)
+        ttk.Label(info_frame,
+                 text=f"Wallet Address: {doctor_address}",
+                 style='Info.TLabel').pack(side='left', padx=10)
+
+        # Patients table
+        self.create_patients_table(main_frame)
+
+        # Add patient form
+        self.create_add_patient_form(main_frame)
+
+        # Initial patients list load
+        self.refresh_patients_list()
+
+    def create_patients_table(self, parent_frame):
+        """Create patients table"""
+        patients_frame = ttk.LabelFrame(parent_frame, text="Patients List", padding="10")
+        patients_frame.pack(fill='both', expand=True, pady=10)
+        
+        columns = ('Address', 'Name', 'Age', 'Medical ID', 'Registration Date')
+        self.patients_tree = ttk.Treeview(patients_frame, 
+                                        columns=columns, 
+                                        show='headings',
+                                        height=10)
+        
+        for col in columns:
+            self.patients_tree.heading(col, text=col)
+            self.patients_tree.column(col, width=120)
+
+        scrollbar = ttk.Scrollbar(patients_frame, 
+                                orient=tk.VERTICAL,
+                                command=self.patients_tree.yview)
+        self.patients_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.patients_tree.pack(side='left', fill='both', expand=True)
+        scrollbar.pack(side='right', fill='y')
+
+    def create_add_patient_form(self, parent_frame):
+        """Create add patient form"""
+        add_frame = ttk.LabelFrame(parent_frame, text="Add New Patient", padding="10")
+        add_frame.pack(fill='x', pady=10)
+        
+        fields_frame = ttk.Frame(add_frame)
+        fields_frame.pack(fill='x', pady=5)
+        
+        self.patient_entries = {}
+        fields = [
+            ("Wallet Address:", "wallet", 40),
+            ("Full Name:", "name", 30),
+            ("Age:", "age", 5),
+            ("Medical ID:", "medical_id", 15)
+        ]
+        
+        for label, field, width in fields:
+            field_frame = ttk.Frame(fields_frame)
+            field_frame.pack(side='left', padx=5)
+            
+            ttk.Label(field_frame, text=label).pack(anchor='w')
+            entry = ttk.Entry(field_frame, width=width)
+            entry.pack()
+            self.patient_entries[field] = entry
+
+        buttons_frame = ttk.Frame(add_frame)
+        buttons_frame.pack(fill='x', pady=10)
+        
+        ttk.Button(buttons_frame, 
+                  text="Add Patient",
+                  command=self.add_new_patient).pack(side='left', padx=5)
+        ttk.Button(buttons_frame, 
+                  text="Refresh List",
+                  command=self.refresh_patients_list).pack(side='left', padx=5)
+        ttk.Button(buttons_frame, 
+                  text="Logout",
+                  command=self.create_login_screen).pack(side='left', padx=5)
+
+    def show_admin_dashboard(self):
+        """Show admin dashboard"""
+        self.clear_screen()
+        
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(fill='both', expand=True)
+        
+        ttk.Label(main_frame, text="System Administration",
+                 style='Title.TLabel').pack(pady=20)
+        
+        # Doctors table
+        columns = ('Address', 'Name', 'Specialization', 'License Number', 'Status')
+        self.doctors_tree = ttk.Treeview(main_frame, columns=columns, show='headings')
+        
+        for col in columns:
+            self.doctors_tree.heading(col, text=col)
+            self.doctors_tree.column(col, width=150)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL,
+                                command=self.doctors_tree.yview)
+        self.doctors_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.doctors_tree.pack(side='left', fill='both', expand=True)
+        scrollbar.pack(side='right', fill='y')
+        
+        # Action buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=10)
+        
+        ttk.Button(button_frame, text="Approve Doctor",
+                  command=self.approve_selected_doctor).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Refresh List",
+                  command=self.refresh_doctors_list).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Logout",
+                  command=self.create_login_screen).pack(side='left', padx=5)
+        
+        self.refresh_doctors_list()
+
+    def show_doctor_registration(self):
+        """Show doctor registration form"""
+        reg_window = tk.Toplevel(self.root)
+        reg_window.title("New Doctor Registration")
+        reg_window.geometry("500x600")
+        
+        frame = ttk.Frame(reg_window, padding="20")
+        frame.pack(fill='both', expand=True)
+        
+        ttk.Label(frame, text="Doctor Registration",
+                 style='Header.TLabel').pack(pady=10)
+        
+        fields = [
+            ("Wallet Address:", "wallet"),
+            ("Full Name:", "name"),
+            ("Specialization:", "specialization"),
+            ("License Number:", "license"),
+            ("Email:", "email")
+        ]
+        
+        entries = {}
+        for label, field in fields:
+            ttk.Label(frame, text=label).pack(anchor='w')
+            entry = ttk.Entry(frame, width=40)
+            entry.pack(pady=5)
+            entries[field] = entry
+            
+        def register():
+            try:
+                wallet = entries['wallet'].get().strip()
+                if not Web3.is_address(wallet):
+                    raise ValueError("Invalid wallet address")
+                    
+                if not all(entries[f].get().strip() for f in ['name', 'specialization', 'license', 'email']):
+                    raise ValueError("All fields must be filled")
+                
+                tx_hash = self.contract.functions.registerDoctor(
+                    wallet,
+                    entries['name'].get().strip(),
+                    entries['specialization'].get().strip(),
+                    entries['license'].get().strip(),
+                    entries['email'].get().strip()
+                ).transact({'from': self.admin_account})
+                
+                self.w3.eth.wait_for_transaction_receipt(tx_hash)
+                
+                messagebox.showinfo("Success", "Registration successful! Waiting for admin approval")
+                reg_window.destroy()
+                
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+                
+        ttk.Button(frame, text="Register", command=register).pack(pady=20)
+
+    def refresh_patients_list(self):
+        """Refresh patients list"""
+        try:
+            # Clear table
+            for item in self.patients_tree.get_children():
+                self.patients_tree.delete(item)
+
+            # Get patients list
+            patients = self.contract.functions.getDoctorPatients(
+                self.current_doctor_address
+            ).call({
+                'from': self.current_doctor_address
+            })
+
+            # Display patients
+            for patient_address in patients:
+                try:
+                    details = self.contract.functions.getPatientDetails(
+                        patient_address
+                    ).call({
+                        'from': self.current_doctor_address
+                    })
+                    
+                    # Convert timestamp
+                    registration_date = datetime.fromtimestamp(
+                        details[4]
+                    ).strftime('%Y-%m-%d %H:%M')
+                    
+                    # Add to table
+                    self.patients_tree.insert('', 'end', values=(
+                        patient_address,
+                        details[0],  # name
+                        details[1],  # age
+                        details[2],  # medicalId
+                        registration_date
+                    ))
+                except Exception as e:
+                    print(f"Error loading patient details {patient_address}: {str(e)}")
+                    continue
+                    
+        except Exception as e:
+            messagebox.showerror("Error", f"Error loading patients list: {str(e)}")
+
+    def refresh_doctors_list(self):
+        """Refresh doctors list"""
+        try:
+            # Clear table
+            for item in self.doctors_tree.get_children():
+                self.doctors_tree.delete(item)
+
+            # Get doctors list
+            doctors = self.contract.functions.getAllDoctors().call()
+            
+            # Display doctors
+            for address in doctors:
+                details = self.contract.functions.getDoctorDetails(address).call()
+                status = "Approved" if details[4] else "Pending Approval"
+                
+                self.doctors_tree.insert('', 'end', values=(
+                    address,
+                    details[0],  # name
+                    details[1],  # specialization
+                    details[2],  # licenseNumber
+                    status
+                ))
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error loading doctors list: {str(e)}")
+
+    def add_new_patient(self):
+        """Add new patient"""
+        try:
+            # Input validation
+            wallet = self.patient_entries['wallet'].get().strip()
+            if not Web3.is_address(wallet):
+                raise ValueError("Invalid wallet address")
+            
+            age = self.patient_entries['age'].get().strip()
+            if not age.isdigit() or int(age) <= 0:
+                raise ValueError("Age must be a positive number")
+            
+            name = self.patient_entries['name'].get().strip()
+            medical_id = self.patient_entries['medical_id'].get().strip()
+            
+            if not all([name, medical_id]):
+                raise ValueError("All fields must be filled")
+
+            # Send transaction
+            tx_hash = self.contract.functions.registerPatient(
+                wallet,
+                name,
+                int(age),
+                medical_id
+            ).transact({
+                'from': self.current_doctor_address,
+                'gas': 300000
+            })
+            
+            # Wait for confirmation
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+            
+            if receipt.status == 1:
+                messagebox.showinfo("Success", "Patient added successfully")
+                
+                # Clear fields
+                for entry in self.patient_entries.values():
+                    entry.delete(0, tk.END)
+                    
+                # Refresh list
+                self.refresh_patients_list()
+            else:
+                raise Exception("Transaction failed")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error adding patient: {str(e)}")
+
+    def approve_selected_doctor(self):
+        """Approve selected doctor"""
+        try:
+            selected = self.doctors_tree.selection()
+            if not selected:
+                raise ValueError("Please select a doctor from the list")
+            
+            doctor_address = self.doctors_tree.item(selected[0])['values'][0]
+            
+            # Send approval transaction
+            tx_hash = self.contract.functions.approveDoctor(
+                doctor_address
+            ).transact({
+                'from': self.admin_account,
+                'gas': 200000
+            })
+            
+            # Wait for confirmation
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+            
+            if receipt.status == 1:
+                messagebox.showinfo("Success", "Doctor approved successfully")
+                self.refresh_doctors_list()
+            else:
+                raise Exception("Transaction failed")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error approving doctor: {str(e)}")
 
     def clear_screen(self):
-        """ניקוי המסך לצורך מעבר למסך חדש"""
+        """Clear screen"""
         for widget in self.root.winfo_children():
             widget.destroy()
 
-    def create_login_screen(self):
-        """מסך התחברות"""
-        self.clear_screen()
-
-        # מסגרת התחברות
-        login_frame = tk.Frame(self.root)
-        login_frame.pack(pady=20)
-
-        # שם משתמש
-        tk.Label(login_frame, text="התחברות למערכת רפואית").pack(pady=10)
-        tk.Label(login_frame, text="שם משתמש:").pack(anchor="w", padx=10)
-        self.username_entry = tk.Entry(login_frame, width=40)
-        self.username_entry.pack(padx=10, pady=5)
-
-        # סיסמה
-        tk.Label(login_frame, text="סיסמה:").pack(anchor="w", padx=10)
-        self.password_entry = tk.Entry(login_frame, show="*", width=40)
-        self.password_entry.pack(padx=10, pady=5)
-
-        # סוג משתמש
-        self.user_type = tk.StringVar()
-        self.user_type.set("רופא")
-
-        tk.Radiobutton(login_frame, text="רופא", variable=self.user_type, value="רופא").pack(anchor="w", padx=10)
-        tk.Radiobutton(login_frame, text="מנהל", variable=self.user_type, value="מנהל").pack(anchor="w", padx=10)
-
-        # כפתור התחברות
-        tk.Button(login_frame, text="התחבר", command=self.login).pack(pady=10)
-
-        # כפתור הרשמה
-        tk.Button(login_frame, text="הירשם כרופא חדש", command=self.create_registration_screen).pack(pady=10)
-
-    def send_transaction(self, to_address, value_in_ether):
-        """שליחת טרנזקציה לבלוקצ'יין"""
-        try:
-            # כתובת השולח - חשבון מנהל
-            sender_address = self.w3.eth.accounts[0]  # חשבון 0 מ-Ganache
-
-            # הכנת טרנזקציה
-            transaction = {
-                'to': to_address,
-                'from': sender_address,
-                'value': self.w3.toWei(value_in_ether, 'ether'),
-                'gas': 21000,
-                'gasPrice': self.w3.toWei('50', 'gwei')
-            }
-
-            # שליחת הטרנזקציה
-            tx_hash = self.w3.eth.send_transaction(transaction)
-            messagebox.showinfo("הצלחה", f"טרנזקציה נשלחה בהצלחה! Hash: {tx_hash.hex()}")
-        except Exception as e:
-            messagebox.showerror("שגיאה", f"שגיאה בשליחת הטרנזקציה: {str(e)}")
-
-    def create_registration_screen(self):
-        """מסך הרשמה לרופא"""
-        self.clear_screen()
-
-        # מסגרת הרשמה
-        reg_frame = tk.Frame(self.root)
-        reg_frame.pack(pady=20)
-
-        tk.Label(reg_frame, text="הרשמה לרופא חדש").pack(pady=10)
-
-        fields = [
-            ("שם מלא:", "name"),
-            ("מספר רישיון:", "license"),
-            ("התמחות:", "specialization"),
-            ("אימייל:", "email"),
-            ("סיסמה:", "password"),
-            ("אימות סיסמה:", "password_confirm")
-        ]
-
-        self.reg_entries = {}
-        for label_text, field_name in fields:
-            tk.Label(reg_frame, text=label_text).pack(anchor="w", padx=10)
-            entry = tk.Entry(reg_frame, show="*" if "password" in field_name else "", width=40)
-            entry.pack(padx=10, pady=5)
-            self.reg_entries[field_name] = entry
-
-        # כפתור הרשמה
-        tk.Button(reg_frame, text="הרשם", command=self.register_doctor).pack(pady=10)
-        tk.Button(reg_frame, text="חזור", command=self.create_login_screen).pack(pady=5)
-
-    def register_doctor(self):
-        """רישום רופא חדש"""
-        data = {field: entry.get().strip() for field, entry in self.reg_entries.items()}
-
-        # בדיקת שדות חובה
-        if not all(data.values()):
-            messagebox.showerror("שגיאה", "נא למלא את כל השדות")
-            return
-        
-        # בדיקת התאמת סיסמאות
-        if data["password"] != data["password_confirm"]:
-            messagebox.showerror("שגיאה", "הסיסמאות אינן תואמות")
-            return
-
-        encrypted_password = self.encrypt_password(data["password"])
-        
-        # שמירת נתוני הרופא
-        doctor_data = {
-            "name": data["name"],
-            "license_number": data["license"],
-            "specialization": data["specialization"],
-            "email": data["email"],
-            "private_key": encrypted_password,
-            "is_approved": False  # דרוש אישור מנהל
-        }
-
-        if os.path.exists('doctors.json'):
-            with open('doctors.json', 'r') as f:
-                doctors = json.load(f)
-        else:
-            doctors = {}
-
-        # שמירת הרופא החדש בקובץ
-        doctors[data["license"]] = doctor_data
-        with open('doctors.json', 'w') as f:
-            json.dump(doctors, f, indent=2)
-
-        messagebox.showinfo("הצלחה", "הרשמה בוצעה בהצלחה! המתן לאישור מנהל.")
-        self.create_login_screen()
-
-    def login(self):
-        """טיפול בהתחברות"""
-        username = self.username_entry.get()
-        password = self.password_entry.get()
-        user_type = self.user_type.get()
-
-        if user_type == "מנהל":
-            if self.verify_admin(username, password):
-                messagebox.showinfo("התחברות מוצלחת", "ברוך הבא, מנהל")
-                self.clear_screen()
-                self.create_admin_dashboard()
-            else:
-                messagebox.showerror("שגיאה", "שם משתמש או סיסמה שגויים למנהל")
-        else:
-            self.authenticate_doctor(username, password)
-
-    def verify_admin(self, username, password):
-        """אימות פרטי מנהל"""
-        if username == "admin" and password == "admin123":  # ערך ברירת מחדל
-            return True
-        return False
-
-    def authenticate_doctor(self, email, password):
-        """אימות רופא באמצעות אימייל וסיסמה"""
-        try:
-            if os.path.exists('doctors.json'):
-                with open('doctors.json', 'r') as f:
-                    doctors = json.load(f)
-                
-                for doctor in doctors.values():
-                    if doctor['email'] == email:
-                        # פענוח הסיסמה המוצפנת והשוואה עם הסיסמה המוזנת
-                        stored_password = self.decrypt_password(doctor['private_key'])
-                        if password == stored_password:
-                            if doctor['is_approved']:
-                                messagebox.showinfo("התחברות מוצלחת", f"ברוך הבא, ד\"ר {doctor['name']}")
-                                self.clear_screen()
-                                self.create_doctor_dashboard(doctor['name'])
-                            else:
-                                messagebox.showerror("שגיאה", "הרופא עדיין לא אושר על ידי המנהל")
-                            return
-                        else:
-                            messagebox.showerror("שגיאה", "סיסמה שגויה")
-                            return
-                messagebox.showerror("שגיאה", "רופא לא נמצא במערכת")
-            else:
-                messagebox.showerror("שגיאה", "לא נמצאו רופאים במערכת")
-        except Exception as e:
-            messagebox.showerror("שגיאה", f"שגיאה באימות רופא: {str(e)}")
-
-    def create_admin_dashboard(self):
-        """מסך מנהל - אישור רופאים והצגת סטטיסטיקות"""
-        self.clear_screen()
-        admin_frame = tk.Frame(self.root)
-        admin_frame.pack(fill="both", expand=True)
-
-        tk.Label(admin_frame, text="ברוך הבא, מנהל", font=("Arial", 16)).pack(pady=10)
-
-        # הצגת סטטיסטיקות
-        stats_frame = tk.LabelFrame(admin_frame, text="סטטיסטיקות מערכת")
-        stats_frame.pack(fill="x", padx=10, pady=10)
-
-        stats = self.get_system_stats()
-        stats_labels = [
-            f"סה\"כ רופאים: {stats['total_doctors']}",
-            f"רופאים מאושרים: {stats['approved_doctors']}",
-            f"רופאים ממתינים לאישור: {stats['pending_doctors']}",
-        ]
-
-        for stat in stats_labels:
-            tk.Label(stats_frame, text=stat).pack(anchor="w", padx=10, pady=5)
-
-        # אישור רופאים
-        doctors_list_frame = tk.Frame(admin_frame)
-        doctors_list_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        self.doctors_tree = tk.Listbox(doctors_list_frame)
-        self.doctors_tree.pack(fill="both", expand=True)
-
-        self.update_doctors_list()
-
-        tk.Button(admin_frame, text="אישור רופא", command=self.approve_doctor).pack(pady=10)
-
-    def get_system_stats(self):
-        """חישוב סטטיסטיקות המערכת"""
-        stats = {
-            "total_doctors": 0,
-            "approved_doctors": 0,
-            "pending_doctors": 0,
-        }
-
-        try:
-            if os.path.exists('doctors.json'):
-                with open('doctors.json', 'r') as f:
-                    doctors = json.load(f)
-                stats["total_doctors"] = len(doctors)
-                stats["approved_doctors"] = sum(1 for doctor in doctors.values() if doctor["is_approved"])
-                stats["pending_doctors"] = stats["total_doctors"] - stats["approved_doctors"]
-        except Exception as e:
-            messagebox.showerror("שגיאה", f"שגיאה בחישוב הסטטיסטיקות: {str(e)}")
-
-        return stats
-
-    def update_doctors_list(self):
-        """עדכון רשימת הרופאים בטבלה"""
-        self.doctors_tree.delete(0, tk.END)
-
-        try:
-            if os.path.exists('doctors.json'):
-                with open('doctors.json', 'r') as f:
-                    doctors = json.load(f)
-
-                for doctor in doctors.values():
-                    self.doctors_tree.insert(tk.END, f"{doctor['name']} - {doctor['license_number']} - {'מאושר' if doctor['is_approved'] else 'ממתין לאישור'}")
-        except Exception as e:
-            messagebox.showerror("שגיאה", f"שגיאה בטעינת רשימת הרופאים: {str(e)}")
-
-    def approve_doctor(self):
-        """אישור רופא על ידי המנהל והעברת טרנזקציה לבלוקצ'יין"""
-        selected_item = self.doctors_tree.curselection()
-        if not selected_item:
-            messagebox.showerror("שגיאה", "יש לבחור רופא לאישור")
-            return
-
-        doctor_data = self.doctors_tree.get(selected_item)
-        license_number = doctor_data.split(" - ")[1]  # חיתוך מספר רישיון מהרשימה
-
-        try:
-            with open('doctors.json', 'r') as f:
-                doctors = json.load(f)
-
-            if license_number in doctors:
-                doctors[license_number]["is_approved"] = True
-
-                # שמירת האישור בקובץ
-                with open('doctors.json', 'w') as f:
-                    json.dump(doctors, f, indent=2)
-
-                # ביצוע טרנזקציה להוספת הרופא בבלוקצ'יין
-                doctor_address = doctors[license_number]["email"]  # נניח שהכתובת היא האימייל
-                self.send_transaction(doctor_address, 0.000000001)  # טרנזקציה של 0.000000001 ETH
-
-                messagebox.showinfo("הצלחה", "הרופא אושר בהצלחה!")
-                self.update_doctors_list()
-            else:
-                messagebox.showerror("שגיאה", "הרופא לא נמצא במערכת")
-        except Exception as e:
-            messagebox.showerror("שגיאה", f"שגיאה באישור הרופא: {str(e)}")
-
-    def create_patient_transaction(self, patient_address, value_in_ether):
-        """שליחת טרנזקציה למטופל"""
-        try:
-            # כתובת הרופא
-            doctor_address = self.w3.eth.accounts[0]  # חשבון הרופא
-            
-            # הכנת טרנזקציה
-            transaction = {
-                'to': patient_address,
-                'from': doctor_address,
-                'value': self.w3.toWei(value_in_ether, 'ether'),
-                'gas': 6721975,
-                'gasPrice': self.w3.toWei('50', 'gwei')
-            }
-
-            # שליחת הטרנזקציה
-            tx_hash = self.w3.eth.send_transaction(transaction)
-            messagebox.showinfo("הצלחה", f"טרנזקציה נשלחה בהצלחה! Hash: {tx_hash.hex()}")
-        except Exception as e:
-            messagebox.showerror("שגיאה", f"שגיאה בשליחת הטרנזקציה: {str(e)}")
-    
-    def create_doctor_dashboard(self, doctor_name):
-        """מסך רופא לשליחת טרנזקציות למטופלים"""
-        doctor_frame = tk.Frame(self.root)
-        doctor_frame.pack(fill="both", expand=True)
-
-        tk.Label(doctor_frame, text=f"ברוך הבא, ד\"ר {doctor_name}", font=("Arial", 16)).pack(pady=10)
-
-        tk.Label(doctor_frame, text="כתובת מטופל:").pack(anchor="w", padx=10)
-        self.patient_address_entry = tk.Entry(doctor_frame, width=40)
-        self.patient_address_entry.pack(padx=10, pady=5)
-
-        tk.Label(doctor_frame, text="כמות ETH לשליחה:").pack(anchor="w", padx=10)
-        self.amount_entry = tk.Entry(doctor_frame, width=40)
-        self.amount_entry.pack(padx=10, pady=5)
-
-        tk.Button(doctor_frame, text="שלח טרנזקציה", command=self.send_patient_transaction).pack(pady=10)
-
-    def send_patient_transaction(self):
-        """שליחת טרנזקציה לרופא"""
-        patient_address = self.patient_address_entry.get()
-        amount = float(self.amount_entry.get())
-        self.create_patient_transaction(patient_address, amount)
-
     def run(self):
-        """הפעלת הממשק"""
+        """Run application"""
         self.root.mainloop()
 
 def main():
-    gui = MedicalGUI()
-    gui.run()
+    """Main function"""
+    try:
+        app = MedicalInterface()
+        app.run()
+    except Exception as e:
+        print(f"System error: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     main()
